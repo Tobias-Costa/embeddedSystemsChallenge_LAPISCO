@@ -2,8 +2,12 @@ from django.shortcuts import render
 from django.http import HttpResponse
 
 # Create your views here.
-def detection(request):
-    return HttpResponse("olá detection")
 
-def detection_heatmap(request):
-    return HttpResponse("olá heatmap")
+def index(request):
+    return render(request, 'index.html')
+
+def detection(request):
+    return render(request, "person_detection.html")
+
+def heatmap(request):
+    return render(request, "person_heatmap.html")
