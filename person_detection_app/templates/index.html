@@ -1,25 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Homepage</title>
-</head>
-<body>
+  </head>
+  <body>
     <h1>LAPISCO Embedded Systems Challenge</h1>
     <p>Choose one of the link views bellow</p>
 
     <ul>
-        <li>
-            <a href="person/detection/">Person detection boxes view</a>
-        </li>
+      <li>
+        <a href="{% url 'detection' %}">Person detection boxes view</a>
+      </li>
 
-        <li>
-            <a href="person/heatmap/">Person heatmap view</a>
-        </li>
+      <li>
+        <a href="{% url 'heatmap' %}">Person heatmap view</a>
+      </li>
 
+      <li>
+        <a href="{% url 'dashboard' %}">Challenge Dashboard view</a>
+      </li>
     </ul>
-    
-</body>
+  </body>
 </html>
