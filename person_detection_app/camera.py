@@ -7,9 +7,9 @@ model = YOLO("yolo_models/best.pt")
 heatmap = Heatmap(show=False, model=model, colormap=cv2.COLORMAP_PARULA, conf=0.40)
 
 def convert_frame2bytes(frame):
-    sucess, buffer = cv2.imencode(".jpg", frame)
+    success, buffer = cv2.imencode(".jpg", frame)
 
-    if not sucess:
+    if not success:
         print("Error: Couldn't transform frame to '.jpg' buffer")
         return None
 
@@ -22,17 +22,17 @@ def process_frame(frame, mode):
         # Frame bytes
         return convert_frame2bytes(results[0].plot())
 
-    if mode == "heatmap_mode":
+    elif mode == "heatmap_mode":
         results = heatmap(frame)
         # Frame bytes
         return convert_frame2bytes(results.plot_im)
     
-    if mode == "dashboard_mode":
+    elif mode == "dashboard_mode":
         heat_dash = heatmap(frame).plot_im
         detect_dash = model(source=frame, conf=0.40)[0].plot()
 
         if heat_dash.shape != detect_dash.shape:
-            heat_dash = cv2.resize(heat_dash, (detect_dash[1], detect_dash[0]))
+            heat_dash = cv2.resize(heat_dash, (detect_dash.shape[1], detect_dash.shape[0]))
 
         combined_frame = np.hstack((heat_dash, detect_dash))
         
@@ -47,13 +47,16 @@ def generate_stream(mode):
         return 0
 
     while cap.isOpened():
-        sucess, frame = cap.read()
+        success, frame = cap.read()
 
-        if not sucess:
+        if not success:
             print("Erro de processamento.")
             break
 
         frame_bytes = process_frame(frame, mode)
+
+        if frame_bytes is None:
+            continue
 
         # Usando mime-type
         yield (
