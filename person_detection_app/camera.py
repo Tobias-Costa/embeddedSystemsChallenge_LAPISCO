@@ -3,7 +3,8 @@ from ultralytics import YOLO
 from ultralytics.solutions import Heatmap
 import numpy as np
 
-model = YOLO("yolo_models/best.pt")
+model = YOLO("yolo_models/yolo26n_openvino_model")
+
 heatmap = Heatmap(show=False, model=model, colormap=cv2.COLORMAP_PARULA, conf=0.40)
 
 def convert_frame2bytes(frame):
@@ -18,7 +19,7 @@ def convert_frame2bytes(frame):
 def process_frame(frame, mode):
 
     if mode == "detection_mode":
-        results = model(source=frame, conf=0.40)
+        results = model(source=frame, conf=0.80)
         # Frame bytes
         return convert_frame2bytes(results[0].plot())
 
@@ -29,7 +30,7 @@ def process_frame(frame, mode):
     
     elif mode == "dashboard_mode":
         heat_dash = heatmap(frame).plot_im
-        detect_dash = model(source=frame, conf=0.40)[0].plot()
+        detect_dash = model(source=frame, conf=0.80)[0].plot()
 
         if heat_dash.shape != detect_dash.shape:
             heat_dash = cv2.resize(heat_dash, (detect_dash.shape[1], detect_dash.shape[0]))
@@ -40,81 +41,32 @@ def process_frame(frame, mode):
         return convert_frame2bytes(combined_frame)
 
 def generate_stream(mode):
-    cap = cv2.VideoCapture(0)
+    try:
+        cap = cv2.VideoCapture(0)
 
-    if not cap.isOpened():
-        print("Não foi possível acessar a câmera.")
-        return 0
+        while True:
+            if not cap.isOpened():
+                print("Não foi possível acessar a câmera. Reiniciando a câmera...")
+                cap = cv2.VideoCapture(0)
+                continue
+        
 
-    while cap.isOpened():
-        success, frame = cap.read()
+            success, frame = cap.read()
 
-        if not success:
-            print("Erro de processamento.")
-            break
+            if not success:
+                print("Erro de leitura. Reiniciando câmera...")
+                cap.release()
+                cap = cv2.VideoCapture(0)
+                continue
 
-        frame_bytes = process_frame(frame, mode)
+            frame_bytes = process_frame(frame, mode)
 
-        if frame_bytes is None:
-            continue
+            if frame_bytes is None:
+                continue
 
-        # Usando mime-type
-        yield (
-            b"--frame\r\n" b"content-type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-        )
-
-    cap.release()
-
-# UNUSED CODE
-
-# def detection_person_boxes_generator():
-#     model = setup_model()
-#     cap = cv2.VideoCapture(0)
-
-#     if not cap.isOpened():
-#         print("Não foi possível acessar a câmera.")
-#         return 0
-
-#     while cap.isOpened():
-#         sucess, frame = cap.read()
-
-#         if not sucess:
-#             print("Erro de processamento.")
-#             break
-
-        # results = model(source=frame, conf=0.20, verbose=False)
-
-        # frame_bytes = convert_frame2bytes(results[0].plot())
-#         # Usando mime-type
-#         yield (
-#             b"--frame\r\n" b"content-type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-#         )
-
-#     cap.release()
-
-
-# def person_heatmap_generator():
-#     model = setup_model()
-#     heatmap = Heatmap(show=False, model=model, colormap=cv2.COLORMAP_PARULA, conf=0.20)
-#     cap = cv2.VideoCapture(0)
-
-#     if not cap.isOpened():
-#         print("Não foi possível acessar a câmera.")
-#         return 0
-
-#     while cap.isOpened():
-#         sucess, frame = cap.read()
-
-#         if not sucess:
-#             print("Erro de processamento.")
-#             break
-
-#         results = heatmap(frame)
-
-#         frame_bytes = convert_frame2bytes(results.plot_im)
-#         # Usando mime-type
-#         yield (
-#             b"--frame\r\n" b"content-type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-#         )
-
-#     cap.release()
+            # Usando mime-type
+            yield (
+                b"--frame\r\n" b"content-type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+            )
+    finally:
+        cap.release()
