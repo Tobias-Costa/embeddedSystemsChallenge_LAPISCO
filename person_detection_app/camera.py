@@ -5,7 +5,7 @@ import time
 import numpy as np
 
 model = YOLO("yolo_models/yolo26n_openvino_model")
-heatmap = Heatmap(show=False, model=model, colormap=cv2.COLORMAP_PARULA, conf=0.80)
+heatmap = Heatmap(show=False, model=model, classes=[0], colormap=cv2.COLORMAP_PARULA, conf=0.80)
 
 def draw_fps(frame, fps):
     cv2.putText(frame, f"FPS: {int(fps)}", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
@@ -23,7 +23,7 @@ def convert_frame2bytes(frame):
 def process_frame(frame, mode, start_time):
 
     if mode == "detection_mode":
-        results = model(source=frame, conf=0.80)
+        results = model(source=frame, conf=0.80, classes=[0])
         output_frame = results[0].plot()
 
     elif mode == "heatmap_mode":
@@ -32,7 +32,7 @@ def process_frame(frame, mode, start_time):
     
     elif mode == "dashboard_mode":
         heat_dash = heatmap(frame).plot_im
-        detect_dash = model(source=frame, conf=0.80)[0].plot()
+        detect_dash = model(source=frame, conf=0.80, classes=[0])[0].plot()
 
         if heat_dash.shape != detect_dash.shape:
             heat_dash = cv2.resize(heat_dash, (detect_dash.shape[1], detect_dash.shape[0]))
