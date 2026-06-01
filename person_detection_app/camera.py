@@ -5,7 +5,7 @@ import time
 import numpy as np
 
 # Inicialização do modelo YOLO otimizado com OpenVINO
-model = YOLO("yolo_models/yolo26n_openvino_model")
+model = YOLO("yolo_models/yolo26n.pt")
 
 # Estruturas para rastreamento de histórico e movimentação dos objetos
 track_history = defaultdict(lambda: [])
@@ -55,46 +55,46 @@ def generate_stream():
             start_time = time.time()
             
             # Inferência do YOLO restringindo a detecção apenas para pessoas (classe 0)
-            results = model.track(frame, persist=True, classes=[0], imgsz=320, conf=0.8)
+            results = model.track(frame, persist=True, classes=[0], imgsz=320) #, conf=0.8
             result = results[0]
 
             # Validação e desenho das caixas delimitadoras (bounding boxes)
-            if result.boxes.id != None:
+            if result.boxes is not None and result.boxes.id is not None:
                 annotated_frame = result.plot()
-            else:
-                continue
+                boxes = result.boxes.xywh.cpu()
+                tracks_ids = result.boxes.id.int().cpu().tolist()
 
-            boxes = result.boxes.xywh.cpu()
-            tracks_ids = result.boxes.id.int().cpu().tolist()
+                for box, track_id in zip(boxes, tracks_ids):
+                    track_id = int(track_id)
+                    x_center, y_center, width, height = box
+                    current_position = (float(x_center), float(y_center))
 
-            for box, track_id in zip(boxes, tracks_ids):
-                track_id = int(track_id)
-                x_center, y_center, width, height = box
-                current_position = (float(x_center), float(y_center))
+                    # Conversão e normalização das coordenadas para os limites da matriz
+                    top_left_x = max(0, int(x_center - width / 2))
+                    top_left_y = max(0, int(y_center - height / 2))
+                    bottom_right_x = min(heatmap.shape[1], int(x_center + width / 2))
+                    bottom_right_y = min(heatmap.shape[0], int(y_center + height / 2))
 
-                # Conversão e normalização das coordenadas para os limites da matriz
-                top_left_x = max(0, int(x_center - width / 2))
-                top_left_y = max(0, int(y_center - height / 2))
-                bottom_right_x = min(heatmap.shape[1], int(x_center + width / 2))
-                bottom_right_y = min(heatmap.shape[0], int(y_center + height / 2))
+                    # Atualização do histórico de rastreamento com teto de 1200 registros
+                    track = track_history[track_id]
+                    track.append(current_position)
+                    if len(track) > 1200:
+                        track.pop(0)
 
-                # Atualização do histórico de rastreamento com teto de 1200 registros
-                track = track_history[track_id]
-                track.append(current_position)
-                if len(track) > 1200:
-                    track.pop(0)
-
-                # Acúmulo no heatmap se houver deslocamento significativo do objeto
-                last_position = last_positions.get(track_id)
-                if last_position and calculate_distance(last_position, current_position) > 5:
+                    # Acúmulo no heatmap conforme permanência do objeto
                     heatmap[top_left_y: bottom_right_y, top_left_x: bottom_right_x] += 1
-                
-                last_positions[track_id] = current_position
+                    
+                    last_positions[track_id] = current_position
+            else:
+                annotated_frame = frame.copy()
             
-            # Tratamento visual, normalização e aplicação da escala de cor JET no heatmap
-            heatmap_blurred = cv2.GaussianBlur(heatmap, (15,15), 0)
-            heatmap_norm = cv2.normalize(heatmap_blurred, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-            heatmap_color = cv2.applyColorMap(heatmap_norm, cv2.COLORMAP_JET)
+            if np.max(heatmap) > 0:
+                # Tratamento visual, normalização e aplicação da escala de cor JET no heatmap
+                heatmap_blurred = cv2.GaussianBlur(heatmap, (15,15), 0)
+                heatmap_norm = cv2.normalize(heatmap_blurred, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                heatmap_color = cv2.applyColorMap(heatmap_norm, cv2.COLORMAP_JET)
+            else:
+                heatmap_color =  np.zeros_like(frame, dtype=np.uint8)
 
             # Sobreposição (overlay) do heatmap sobre o frame original
             alpha = 0.7
