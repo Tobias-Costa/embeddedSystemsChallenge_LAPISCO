@@ -37,7 +37,7 @@ def generate_stream():
     try:
         cap = cv2.VideoCapture(0)
         # Matriz acumuladora para geração do mapa de calor (Heatmap)
-        heatmap = np.zeros((int(cap.get(4)), int(cap.get(3)), 3), dtype=np.float32)
+        heatmap = np.zeros((int(cap.get(4)), int(cap.get(3))), dtype=np.float32)
 
         while True:
             # Mecanismo de contingência e reconexão da câmera
@@ -75,13 +75,39 @@ def generate_stream():
                     bottom_right_x = min(heatmap.shape[1], int(x_center + width / 2))
                     bottom_right_y = min(heatmap.shape[0], int(y_center + height / 2))
 
-                    # Acúmulo no heatmap conforme permanência do objeto
-                    heatmap[top_left_y:bottom_right_y, top_left_x:bottom_right_x] += 1
+                    # Cria vetor contendo todos os valores de X dentro do box de detection
+                    xs = np.arange(top_left_x, bottom_right_x)
+                    # Cria vetor contendo todos os valores de Y dentro do box de detection
+                    ys = np.arange(top_left_y, bottom_right_y)
+
+                    # Cria matrizes dos vetores X e Y que contém todas as coordenadas do box de detection
+                    xx, yy = np.meshgrid(xs, ys)
+
+                    # Cálculo das distâncias do centro do box para a esquerda e direita, respecivamente
+                    l = xx - top_left_x
+                    r = bottom_right_x - xx
+                    # Cálculo das distâncias do centro do box para o topo e a base, respecivamente
+                    t = yy - top_left_y
+                    b = bottom_right_y - yy
+
+                    # Constante de correção para evitar divisão por zero
+                    eps = 1e-6
+                    # Parâmetros de decaimento do heatmap
+                    eta = 0.3
+                    phi = 0.3
+
+                    gc = (
+                        ((np.minimum(l, r) + eps) / (np.maximum(l, r) + eps)) ** eta
+                    ) * (((np.minimum(t, b) + eps) / (np.maximum(t, b) + eps)) ** phi)
+
+                    heatmap[top_left_y:bottom_right_y, top_left_x:bottom_right_x] += (
+                        gc * 30
+                    )
             else:
                 annotated_frame = frame.copy()
 
             # Tratamento visual, normalização e aplicação da escala de cor JET no heatmap
-            heatmap[:] *= 0.995
+            heatmap -= 5
             # Uso do np.clip para limitar 255 como máximo e permitir decaimento suave
             heatmap_norm = np.clip(heatmap, 0, 255).astype(np.uint8)
             heatmap_blurred = cv2.GaussianBlur(heatmap_norm, (15, 15), 0)
