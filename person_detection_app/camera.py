@@ -4,12 +4,11 @@ from collections import defaultdict
 import time
 import numpy as np
 
-# Inicialização do modelo YOLO otimizado com OpenVINO
-model = YOLO("yolo_models/yolo26n.pt")
+# Inicialização do modelo YOLO otimizado com NCNN
+model = YOLO("yolo_models/yolo26n_ncnn_model")
 
 # Estruturas para rastreamento de histórico e movimentação dos objetos
 track_history = defaultdict(lambda: [])
-last_positions = {}
 
 def draw_fps(frame, fps):
     """Renderiza o contador de FPS no canto superior esquerdo do frame."""
@@ -59,6 +58,7 @@ def generate_stream():
             result = results[0]
 
             # Validação e desenho das caixas delimitadoras (bounding boxes)
+            # Se haver detecção de caixas e os ids dela, caso contrário retorna frame enxuto para economizar recursos
             if result.boxes is not None and result.boxes.id is not None:
                 annotated_frame = result.plot()
                 boxes = result.boxes.xywh.cpu()
@@ -83,18 +83,15 @@ def generate_stream():
 
                     # Acúmulo no heatmap conforme permanência do objeto
                     heatmap[top_left_y: bottom_right_y, top_left_x: bottom_right_x] += 1
-                    
-                    last_positions[track_id] = current_position
             else:
                 annotated_frame = frame.copy()
-            
-            if np.max(heatmap) > 0:
-                # Tratamento visual, normalização e aplicação da escala de cor JET no heatmap
-                heatmap_blurred = cv2.GaussianBlur(heatmap, (15,15), 0)
-                heatmap_norm = cv2.normalize(heatmap_blurred, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-                heatmap_color = cv2.applyColorMap(heatmap_norm, cv2.COLORMAP_JET)
-            else:
-                heatmap_color =  np.zeros_like(frame, dtype=np.uint8)
+
+            # Tratamento visual, normalização e aplicação da escala de cor JET no heatmap
+            heatmap[:] *= 0.995
+            heatmap_norm = np.clip(heatmap, 0, 255).astype(np.uint8) 
+            # Uso do np.clip para limitar 255 como máximo e permitir decaimento suave
+            heatmap_blurred = cv2.GaussianBlur(heatmap_norm, (15,15), 0)
+            heatmap_color = cv2.applyColorMap(heatmap_blurred, cv2.COLORMAP_JET)
 
             # Sobreposição (overlay) do heatmap sobre o frame original
             alpha = 0.7
@@ -102,7 +99,7 @@ def generate_stream():
 
             # Ajuste de escala para concatenação horizontal das imagens
             if overlay.shape != annotated_frame.shape:
-                overlay = cv2.resize(annotated_frame, (overlay.shape[1], overlay.shape[0]))
+                overlay = cv2.resize(overlay, (annotated_frame.shape[1], annotated_frame.shape[0]))
 
             output = np.hstack((annotated_frame, overlay))
 
