@@ -3,6 +3,18 @@ from ultralytics import YOLO
 import time
 import numpy as np
 
+ # Constante de correção para evitar divisão por zero
+EPS = 1e-6
+# Parâmetros de decaimento do heatmap
+GC_ETA = 0.3
+GC_PHI = 0.3
+# Constante de decremento do heatmap
+HEATMAP_DECAY = 5
+# Constante de multiplicação do GC
+HEATMAP_GAIN = 30
+# Constante para transparência do overlay
+HEATMAP_ALPHA = 0.7
+
 # Inicialização do modelo YOLO otimizado com NCNN
 model = YOLO("yolo_models/yolo26n_ncnn_model")
 
@@ -32,6 +44,48 @@ def convert_frame2bytes(frame):
     return buffer.tobytes()
 
 
+def calculate_gc(top_left_x, top_left_y, bottom_right_x, bottom_right_y):
+    '''Cria matriz de centralidade generalizada.'''
+
+    # Cria vetor contendo todos os valores de X dentro do box de detection
+    xs = np.arange(top_left_x, bottom_right_x)
+    # Cria vetor contendo todos os valores de Y dentro do box de detection
+    ys = np.arange(top_left_y, bottom_right_y)
+
+    # Cria matrizes dos vetores X e Y que contém todas as coordenadas do box de detection
+    xx, yy = np.meshgrid(xs, ys)
+
+    # Cálculo das distâncias do centro do box para a esquerda e direita, respecivamente
+    l = xx - top_left_x
+    r = bottom_right_x - xx
+    # Cálculo das distâncias do centro do box para o topo e a base, respecivamente
+    t = yy - top_left_y
+    b = bottom_right_y - yy
+
+   
+
+    # Matriz de valores do heatmap(Generalized Centerness)
+    gc = (
+        ((np.minimum(l, r) + EPS) / (np.maximum(l, r) + EPS)) ** GC_ETA
+    ) * (((np.minimum(t, b) + EPS) / (np.maximum(t, b) + EPS)) ** GC_PHI)
+
+    return gc
+
+
+def process_heatmap(heatmap, frame):
+    '''Tratamento visual, normalização e aplicação da escala de cor JET no heatmap'''
+
+    # Uso do np.clip para limitar 255 como máximo e permitir decaimento suave
+    heatmap_norm = np.clip(heatmap, 0, 255).astype(np.uint8)
+    heatmap_blurred = cv2.GaussianBlur(heatmap_norm, (15, 15), 0)
+    heatmap_color = cv2.applyColorMap(heatmap_blurred, cv2.COLORMAP_JET)
+
+    # Sobreposição (overlay) do heatmap sobre o frame original
+    overlay = cv2.addWeighted(frame, 1 - HEATMAP_ALPHA, heatmap_color, HEATMAP_ALPHA, 0)
+
+    return overlay
+
+
 def generate_stream():
     """Gerador para captura de vídeo, processamento de rastreamento e mapa de calor."""
     try:
@@ -53,7 +107,8 @@ def generate_stream():
                 cap.release()
                 cap = cv2.VideoCapture(0)
                 continue
-
+            
+            # Variável usada no cálculo do FPS
             start_time = time.time()
 
             # Inferência do YOLO restringindo a detecção apenas para pessoas (classe 0)
@@ -67,6 +122,7 @@ def generate_stream():
                 boxes = result.boxes.xywh.cpu()
 
                 for box in boxes:
+                    # Separa os valores de box para melhor legibilidade
                     x_center, y_center, width, height = box
 
                     # Conversão e normalização das coordenadas para os limites da matriz
@@ -75,54 +131,30 @@ def generate_stream():
                     bottom_right_x = min(heatmap.shape[1], int(x_center + width / 2))
                     bottom_right_y = min(heatmap.shape[0], int(y_center + height / 2))
 
-                    # Cria vetor contendo todos os valores de X dentro do box de detection
-                    xs = np.arange(top_left_x, bottom_right_x)
-                    # Cria vetor contendo todos os valores de Y dentro do box de detection
-                    ys = np.arange(top_left_y, bottom_right_y)
+                    gc = calculate_gc(top_left_x, top_left_y, bottom_right_x, bottom_right_y)
 
-                    # Cria matrizes dos vetores X e Y que contém todas as coordenadas do box de detection
-                    xx, yy = np.meshgrid(xs, ys)
-
-                    # Cálculo das distâncias do centro do box para a esquerda e direita, respecivamente
-                    l = xx - top_left_x
-                    r = bottom_right_x - xx
-                    # Cálculo das distâncias do centro do box para o topo e a base, respecivamente
-                    t = yy - top_left_y
-                    b = bottom_right_y - yy
-
-                    # Constante de correção para evitar divisão por zero
-                    eps = 1e-6
-                    # Parâmetros de decaimento do heatmap
-                    eta = 0.3
-                    phi = 0.3
-
-                    gc = (
-                        ((np.minimum(l, r) + eps) / (np.maximum(l, r) + eps)) ** eta
-                    ) * (((np.minimum(t, b) + eps) / (np.maximum(t, b) + eps)) ** phi)
-
+                    # Atribuição do GC à região do detection box multiplicado por 30 para rápido crescimento do heatmap
                     heatmap[top_left_y:bottom_right_y, top_left_x:bottom_right_x] += (
-                        gc * 30
+                        gc * HEATMAP_GAIN
                     )
             else:
+                # Caso não seja detectado nimguém, o frame de detecção sera igual ao frame capturado e o heatmap não mudará
+                # Através dessa condicional o processamento de frames se torna mais rápido
                 annotated_frame = frame.copy()
 
-            # Tratamento visual, normalização e aplicação da escala de cor JET no heatmap
-            heatmap -= 5
-            # Uso do np.clip para limitar 255 como máximo e permitir decaimento suave
-            heatmap_norm = np.clip(heatmap, 0, 255).astype(np.uint8)
-            heatmap_blurred = cv2.GaussianBlur(heatmap_norm, (15, 15), 0)
-            heatmap_color = cv2.applyColorMap(heatmap_blurred, cv2.COLORMAP_JET)
+            # Decremento dos valores do heatmap
+            heatmap -= HEATMAP_DECAY
 
-            # Sobreposição (overlay) do heatmap sobre o frame original
-            alpha = 0.7
-            overlay = cv2.addWeighted(frame, 1 - alpha, heatmap_color, alpha, 0)
-
+            # Ajustes do heatmap
+            overlay = process_heatmap(heatmap, frame)
+            
             # Ajuste de escala para concatenação horizontal das imagens
             if overlay.shape != annotated_frame.shape:
                 overlay = cv2.resize(
                     overlay, (annotated_frame.shape[1], annotated_frame.shape[0])
                 )
 
+            # Concatenação dos resultados
             output = np.hstack((annotated_frame, overlay))
 
             # Cálculo de desempenho e desenho do FPS final
