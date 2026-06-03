@@ -3,7 +3,7 @@ from ultralytics import YOLO
 import time
 import numpy as np
 
- # Constante de correção para evitar divisão por zero
+# Constante de correção para evitar divisão por zero
 EPS = 1e-6
 # Parâmetros de decaimento do heatmap
 GC_ETA = 0.3
@@ -11,8 +11,8 @@ GC_PHI = 0.3
 # Constante de decremento do heatmap
 HEATMAP_DECAY = 5
 # Constante de multiplicação do GC
-HEATMAP_GAIN = 30
-# Constante para transparência do overlay
+HEATMAP_GAIN = 20
+# Constante para opacidade do overlay
 HEATMAP_ALPHA = 0.7
 
 # Inicialização do modelo YOLO otimizado com NCNN
