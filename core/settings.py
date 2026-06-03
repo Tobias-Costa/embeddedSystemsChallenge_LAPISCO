@@ -10,7 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 from pathlib import Path
+from dotenv import load_dotenv
 import os
+
+# Carrega variáveis de ambiente
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,12 +23,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-c50qc54b++*r$qd8@_dicisdes*huy(l*wy+0d5(nvmzae(r42'
+SECRET_KEY = os.getenv('SECRET_KEY','django-insecure-c50qc54b++*r$qd8@_dicisdes*huy(l*wy+0d5(nvmzae(r42')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.3.182']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', os.getenv('RASPBERRY_IP')]
 
 
 # Application definition
